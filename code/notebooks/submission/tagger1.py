@@ -2,8 +2,15 @@ import torch
 import torch.nn as nn
 from typing import Optional
 from torch.utils.data import DataLoader
-from lib_tagger import WindowTagger, get_device, train, test, write_test_results, write_plots_and_parameters
-from vocab import Vocab, TagData
+from submission.lib_tagger import (
+    WindowTagger,
+    get_device,
+    train,
+    test,
+    write_test_results,
+    write_plots_and_parameters,
+)
+from submission.vocab import Vocab, TagData
 import logging
 import click
 
@@ -13,6 +20,103 @@ formatter = logging.Formatter("%(asctime)s %(name)-12s %(levelname)-8s %(message
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
+
+
+def runner(
+    train_path: str,
+    dev_path: str,
+    test_path: Optional[str] = None,
+    num_epochs: int = 10,
+    batch_size: int = 8,
+    learning_rate: float = 1e-3,
+    task: str = "pos",
+    hidden_dim=2000,
+    output_path: str = "test.out",
+    pretrained_weights_path: Optional[str] = None,
+    pretrained_words_path: Optional[str] = None,
+    results_path: Optional[str] = None,
+    device: str = None,
+    sub_word: bool = False,
+):
+    if not device:
+        device = get_device()
+    seperator = " " if task == "pos" else "\t"
+
+    logger.info(f"Using device {device}")
+    logger.info("Fetching vocabulary and tags from %s", train_path)
+
+    vocab = Vocab(
+        train_path,
+        pretrained_word_path=pretrained_words_path,
+        seperator=seperator,
+        sub_word=sub_word,
+    )
+    logger.info(
+        f"Vocabulary contains {len(vocab.words)} words. There are {len(vocab.tags)} possible tags"
+    )
+    noisy_tag = vocab.T2I[vocab.OUTSIDE] if task == "ner" else None
+
+    logger.info("Initializing training and validation datasets...")
+    train_dataset = TagData(train_path, vocab, seperator, sub_word=sub_word)
+    dev_dataset = TagData(dev_path, vocab, seperator, sub_word=sub_word)
+
+    train_loader = DataLoader(train_dataset, batch_size)
+    dev_loader = DataLoader(dev_dataset, batch_size)
+
+    logger.info("Done initializaing training and dev datasets")
+    if test_path:
+        logger.info("Initializing test data...")
+        test_dataset = TagData(
+            test_path, vocab, separator=seperator, test=True, sub_word=sub_word
+        )
+        test_dataloader = DataLoader(test_dataset)
+
+    logger.info("Initializing mode and optimizer")
+    model = WindowTagger(
+        vocab,
+        in_dim=5,
+        hid_dim=hidden_dim,
+        out_dim=len(vocab.tags),
+        pretrained_embeddings_path=pretrained_weights_path,
+        sub_word=sub_word,
+    )
+    logger.info(f"model:\n{model}")
+    logger.info("Initalizing optimizer")
+
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    loss_fn = nn.CrossEntropyLoss()
+    model.to(device)
+
+    accs, losses = [], []
+    for t in range(num_epochs):
+        logger.info(f"Epoch {t+1}\n-------------------------------")
+        train(
+            dataloader=train_loader,
+            model=model,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            device=device,
+            noisy_tag=noisy_tag,
+        )
+        acc, loss = test(dev_loader, model, loss_fn, device)
+        accs.append(acc)
+        losses.append(loss)
+    logger.info(f"Training done! Final Accuracy: {acc}, loss: {loss}")
+
+    if test_path:
+        write_test_results(
+            output_path, model, test_dataloader, vocab.I2T, vocab.I2W, seperator
+        )
+    if results_path:
+        write_plots_and_parameters(
+            model,
+            accs,
+            losses,
+            num_epochs,
+            learning_rate,
+            results_path,
+            pre_trained=True if pretrained_weights_path else False,
+        )
 
 
 @click.command()
@@ -99,72 +203,25 @@ def main(
             pretrained_words_path (Optional[str]): Path for the file containing pre-trained words. Default is None.
             device (str): Which device to use. Can be "cpu" or "cuda". If not given, the program will decide according to availability. Default is None.
             sub_word (bool): If set, data will be broken down to sub word units. Default is false
-        """
+    """
 
-    if not device:
-        device = get_device()
-    seperator = " " if task == "pos" else "\t"
-
-    logger.info(f"Using device {device}")
-    logger.info("Fetching vocabulary and tags from %s", train_path)
-
-    vocab = Vocab(train_path,pretrained_word_path=pretrained_words_path,seperator=seperator, sub_word=sub_word)
-    logger.info(
-        f"Vocabulary contains {len(vocab.words)} words. There are {len(vocab.tags)} possible tags"
+    runner(
+        train_path=train_path,
+        dev_path=dev_path,
+        test_path=test_path,
+        num_epochs=num_epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        task=task,
+        hidden_dim=hidden_dim,
+        output_path=output_path,
+        pretrained_weights_path=pretrained_weights_path,
+        pretrained_words_path=pretrained_weights_path,
+        results_path=results_path,
+        device=device,
+        sub_word=sub_word,
     )
-    noisy_tag = vocab.T2I[vocab.OUTSIDE] if task == "ner" else None
 
-    logger.info("Initializing training and validation datasets...")
-    train_dataset = TagData(train_path, vocab, seperator,sub_word=sub_word)
-    dev_dataset = TagData(dev_path, vocab, seperator,sub_word=sub_word)
-
-    train_loader = DataLoader(train_dataset, batch_size)
-    dev_loader = DataLoader(dev_dataset, batch_size)
-
-    logger.info("Done initializaing training and dev datasets")
-    if test_path:
-        logger.info("Initializing test data...")
-        test_dataset = TagData(test_path, vocab, separator=seperator, test=True,sub_word=sub_word)
-        test_dataloader = DataLoader(test_dataset)
-
-    logger.info("Initializing mode and optimizer")
-    model = WindowTagger(
-        vocab,
-        in_dim=5,
-        hid_dim=hidden_dim,
-        out_dim=len(vocab.tags),
-        pretrained_embeddings_path=pretrained_weights_path,
-        sub_word=sub_word
-    )
-    logger.info(f"model:\n{model}")
-    logger.info("Initalizing optimizer")
-
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    loss_fn = nn.CrossEntropyLoss()
-    model.to(device)
-
-    accs, losses = [], []
-    for t in range(num_epochs):
-        logger.info(f"Epoch {t+1}\n-------------------------------")
-        train(
-            dataloader=train_loader,
-            model=model,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            device=device,
-            noisy_tag=noisy_tag,
-        )
-        acc, loss = test(dev_loader, model, loss_fn, device)
-        accs.append(acc)
-        losses.append(loss)
-    logger.info(f"Training done! Final Accuracy: {acc}, loss: {loss}")
-
-    if test_path:
-        write_test_results(
-            output_path, model, test_dataloader, vocab.I2T, vocab.I2W, seperator
-        )
-    if results_path:
-        write_plots_and_parameters(model, accs, losses,num_epochs,learning_rate,results_path,pre_trained=True if pretrained_weights_path else False)
 
 if __name__ == "__main__":
     main()

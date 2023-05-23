@@ -10,7 +10,6 @@ code/notebooks/*.ipynb
 code/notebooks/*.png
 code/notebooks/*.ner
 code/notebooks/*.pos
-code/notebooks/.__pycahce__
 test2.ner
 *.tgz
 .DS_Store
@@ -18,3 +17,6 @@ results/
 assignment1/
 part2.txt
 
+code/notebooks/submission/__pycache__/lib_tagger.cpython-38.pyc
+code/notebooks/submission/__pycache__/tagger1.cpython-38.pyc
+code/notebooks/submission/__pycache__/vocab.cpython-38.pyc
