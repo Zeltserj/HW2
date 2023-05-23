@@ -1,0 +1,38 @@
+Sure! Here's the documentation in plain text:
+
+# Model Training for Part-of-Speech (POS) or Named Entity Recognition (NER) Task
+
+This script allows you to train a model for the part-of-speech (POS) or named entity recognition (NER) task using the provided dataset.
+
+## Usage
+
+To train the model, run the script with the following command:
+
+```
+python main.py --train-path <train_file> --dev-path <dev_file> --test-path <test_file> --num-epochs <num_epochs> --batch-size <batch_size> --learning-rate <learning_rate> --task <task_type> --hidden-dim <hidden_dim> --output-path <output_path> --device <device_type>
+```
+
+Replace the following placeholders with appropriate values:
+
+- `<train_file>`: Path to the training data file.
+- `<dev_file>`: Path to the development data file.
+- `<test_file>` (optional): Path to the test data file.
+- `<num_epochs>` (optional): Number of epochs to train the model. Default is 10.
+- `<batch_size>` (optional): Batch size for training. Default is 8.
+- `<learning_rate>` (optional): Learning rate for model optimization. Default is 0.001.
+- `<task_type>` (optional): Task type. Choose between "pos" (part-of-speech) or "ner" (named entity recognition). Default is "pos".
+- `<hidden_dim>` (optional): Hidden dimension size. Default is 2000.
+- `<output_path>` (optional): Path to write the test results. Default is "test.out".
+- `<device_type>` (optional): Device to use for training the model. Choose between "cpu" or "cuda". If not given, the program will decide based on availability.
+
+## Example
+
+Here's an example command to train a model for the POS task:
+
+```
+python tagger1.py --train-path train.txt --dev-path dev.txt --num-epochs 15 --batch-size 16 --learning-rate 0.01 --task pos --hidden-dim 1000 --output-path test_results.txt
+```
+
+This command trains the model using the `train.txt` file as the training data, `dev.txt` file as the development data, and performs 15 epochs of training with a batch size of 16. The learning rate is set to 0.01, and the model will be trained for the POS task with a hidden dimension size of 1000. The test results will be written to the `test_results.txt` file.
+
+Note: If you have a GPU available and want to train the model on it, make sure to specify `--device cuda` in the command.
